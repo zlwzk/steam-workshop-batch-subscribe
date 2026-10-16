@@ -13,7 +13,9 @@
     cooldownMin: 20,
     cooldownMax: 45,
     maxRetries: 3,
-    maxPages: 20
+    maxPages: 20,
+    rangeStart: 0,   // 订阅范围起始序号（1 基）；0 = 从第 1 个开始
+    rangeEnd: 0      // 订阅范围结束序号；0 = 到最后一个
   };
 
   const JOB_KEY = 'wbs_job';
@@ -33,6 +35,8 @@
     ok: 0,
     fail: 0,
     pagesDone: 0,
+    pageOk: 0,
+    pageFail: 0,
     lastFailed: [],
     settings: { ...DEFAULT_SETTINGS },
     auth: { loggedIn: false, sessionId: null },
@@ -320,17 +324,23 @@
       const cont = await sleep(rand(s.delayMin, s.delayMax) * 1000);
       if (!cont) break;
 
+      // 逐项进度，如 3/29
+      Panel.setStatus('progressItem', { i: i + 1, total: state.queue.length });
+
       const okItem = await callWithRetries(item);
       if (state.cancelled) break;
 
       state.done++;
+      const prefix = `[${i + 1}/${state.queue.length}]`;
       if (okItem) {
         state.ok++;
-        log(`[${t('itemOk')}] ${item.title}`, 'ok');
+        state.pageOk++;
+        log(`${prefix} [${t('itemOk')}] ${item.title}`, 'ok');
       } else {
         state.fail++;
+        state.pageFail++;
         state.lastFailed.push(item);
-        log(`[${t('itemFail')}] ${item.title}`, 'fail');
+        log(`${prefix} [${t('itemFail')}] ${item.title}`, 'fail');
       }
       refreshPanel();
 
@@ -344,6 +354,11 @@
         if (!c) break;
         Panel.setStatus('statusRunning');
       }
+    }
+
+    // 每页完成提示（本页成功/失败计数）
+    if (!state.cancelled) {
+      log(t('pageDone', { p: getPageNo(), ok: state.pageOk, fail: state.pageFail }), 'info');
     }
 
     // 自动翻页：本页完成后跳下一页；末页/单页/空页/上限四种终止条件
@@ -477,7 +492,27 @@
     state.queue = items;
     state.total = items.length;
     state.done = 0;
+    state.pageOk = 0;
+    state.pageFail = 0;
     runQueue();
+  }
+
+  // 应用用户设定的订阅序号范围（1 基，闭区间；0/空 = 端点默认值）
+  function applyRange(items) {
+    const r = Panel.getRange();
+    state.settings.rangeStart = r.start;
+    state.settings.rangeEnd = r.end;
+    chrome.storage.local.set({ [SETTINGS_KEY]: state.settings }).catch(() => {});
+
+    let a = r.start > 0 ? r.start : 1;
+    let b = r.end > 0 ? r.end : items.length;
+    a = Math.max(1, Math.min(a, items.length));
+    b = Math.max(1, Math.min(b, items.length));
+    if (a > b) { const tmp = a; a = b; b = tmp; log(t('rangeAutoFixed'), 'info'); }
+    Panel.setRange(a, b === items.length ? 0 : b);
+    const picked = items.slice(a - 1, b);
+    log(t('rangeApply', { a, b, n: picked.length }), 'info');
+    return picked;
   }
 
   async function begin(mode, auto, itemsOverride) {
@@ -488,17 +523,20 @@
       Panel.setStatus('statusIdle');
       return;
     }
-    const items = itemsOverride || scanItems();
-    if (items.length === 0) {
+    const scanned = itemsOverride || scanItems();
+    if (scanned.length === 0) {
       log(t('noItems'), 'fail');
       return;
     }
+    // 重试失败项时使用原始列表；正常启动应用用户设定的序号范围
+    const items = itemsOverride ? scanned : applyRange(scanned);
     state.mode = mode;
     state.auto = auto;
     state.ok = 0;
     state.fail = 0;
     state.pagesDone = 0;
     state.lastFailed = [];
+    if (auto) log(t('pageStart', { p: getPageNo() }), 'info');
     startQueue(items);
   }
 
@@ -513,17 +551,52 @@
       if (next.delayMax < next.delayMin) next.delayMax = next.delayMin;
       if (next.cooldownMax < next.cooldownMin) next.cooldownMax = next.cooldownMin;
       next.maxPages = Math.max(1, Math.min(100, Math.round(next.maxPages) || DEFAULT_SETTINGS.maxPages));
+      // 订阅范围来自面板上的独立输入框，而不是设置表单
+      const r = Panel.getRange();
+      next.rangeStart = Math.max(0, r.start);
+      next.rangeEnd = Math.max(0, r.end);
       state.settings = { ...state.settings, ...next };
       await chrome.storage.local.set({ [SETTINGS_KEY]: state.settings });
+      Panel.setRange(state.settings.rangeStart, state.settings.rangeEnd);
     });
+    Panel.setRange(state.settings.rangeStart, state.settings.rangeEnd);
+  }
+
+  /* ---------- 面板刷新 / 更新检查 ---------- */
+
+  async function doRefresh() {
+    // 重新读取设置（含冷却等改动）、重新检测登录、重新扫描当前页
+    await loadSettings();
+    await refreshAuth();
+    const n = scanItems().length;
+    Panel.setFound(n);
+    Panel.setStatus(state.running ? 'statusRunning' : 'statusIdle');
+    log(t('refreshed', { n }), 'info');
+  }
+
+  async function checkUpdateNow(force) {
+    try {
+      const info = await chrome.runtime.sendMessage({ type: 'wbs:checkUpdate', force: !!force });
+      if (!info) return;
+      if (info.hasUpdate && info.url) {
+        Panel.showUpdate(info.latest, info.url);
+        log(t('updateAvailable', { v: info.latest }) + ' ' + info.url, 'info');
+      } else if (force) {
+        log(info.error ? t('updateCheckFailed') + info.error : t('upToDate', { v: info.current }), info.error ? 'fail' : 'ok');
+      }
+    } catch (e) {
+      if (force) log(t('updateCheckFailed') + e, 'fail');
+    }
   }
 
   /* ---------- 初始化 ---------- */
 
   function init() {
-    Panel.mount();
+    Panel.mount(chrome.runtime.getManifest().version);
     Panel.setFound(scanItems().length);
 
+    Panel.on('refresh', doRefresh);
+    Panel.on('checkUpdate', () => checkUpdateNow(true));
     Panel.on('subscribePage', () => begin('subscribe', false));
     Panel.on('subscribePages', () => begin('subscribe', true));
     Panel.on('unsubscribePage', () => {
@@ -551,12 +624,13 @@
     });
     Panel.on('exportLog', exportLog);
 
-    // 初始化：恢复日志 → 检测登录态并明示 → 加载设置 → 恢复跨页任务
+    // 初始化：恢复日志 → 检测登录态并明示 → 加载设置 → 恢复跨页任务 → 后台静默检查更新
     loadLog()
       .then(refreshAuth)
       .then(() => log(t(authReady() ? 'authOk' : 'notLoggedIn'), authReady() ? 'info' : 'fail'))
       .then(loadSettings)
-      .then(resumeJobIfAny);
+      .then(resumeJobIfAny)
+      .then(() => checkUpdateNow(false));
   }
 
   if (document.readyState === 'loading') {

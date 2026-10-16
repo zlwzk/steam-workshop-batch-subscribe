@@ -39,7 +39,7 @@
     return i;
   }
 
-  function build() {
+  function build(version) {
     if (root) return root;
 
     root = el('div');
@@ -48,7 +48,14 @@
     // header
     const header = el('div', 'wbs-header');
     const title = el('span', 'wbs-title', t('panelTitle'));
+    els.ver = el('span', 'wbs-ver', version ? 'v' + version : '');
     els.mode = el('span', 'wbs-badge-mode', t('modeSubscribe'));
+    const refreshBtn = el('button', 'wbs-icon-btn', '↻');
+    refreshBtn.title = t('refresh');
+    refreshBtn.addEventListener('click', () => handlers['refresh'] && handlers['refresh']());
+    const updateBtn = el('button', 'wbs-icon-btn', '⇪');
+    updateBtn.title = t('checkUpdate');
+    updateBtn.addEventListener('click', () => handlers['checkUpdate'] && handlers['checkUpdate']());
     const gear = el('button', 'wbs-icon-btn', '⚙');
     gear.title = t('settings');
     gear.addEventListener('click', () => els.settings.classList.toggle('wbs-open'));
@@ -64,7 +71,15 @@
       const collapsed = root.classList.toggle('wbs-collapsed');
       collapse.textContent = collapsed ? '□' : '—';
     });
-    header.append(title, els.mode, logExp, logTgl, gear, collapse);
+    header.append(title, els.ver, els.mode, refreshBtn, updateBtn, logExp, logTgl, gear, collapse);
+
+    // 更新提示横幅（默认隐藏）
+    els.updateBanner = el('div', 'wbs-update-banner');
+    els.updateBanner.style.display = 'none';
+    const updateClose = el('button', 'wbs-update-close', '×');
+    updateClose.title = t('close');
+    updateClose.addEventListener('click', () => { els.updateBanner.style.display = 'none'; });
+    els.updateBanner.appendChild(updateClose);
 
     // body
     const body = el('div', 'wbs-body');
@@ -83,6 +98,21 @@
     els.unsub = btn('unsubscribePage', t('unsubscribePage'), 'wbs-btn-red');
     row1.append(els.subPage, els.subPages, els.unsub);
 
+    // 订阅范围（序号），留空/0 表示当前页全部
+    const rangeRow = el('div', 'wbs-range-row');
+    rangeRow.append(el('span', '', t('rangeLabel')));
+    els.rangeStart = document.createElement('input');
+    els.rangeStart.type = 'number';
+    els.rangeStart.min = '0';
+    els.rangeStart.placeholder = '1';
+    els.rangeStart.title = t('rangeHint');
+    els.rangeEnd = document.createElement('input');
+    els.rangeEnd.type = 'number';
+    els.rangeEnd.min = '0';
+    els.rangeEnd.placeholder = t('rangeAll');
+    els.rangeEnd.title = t('rangeHint');
+    rangeRow.append(els.rangeStart, el('span', '', '–'), els.rangeEnd);
+
     const row2 = el('div', 'wbs-btn-row');
     els.pause = btn('pause', t('pause'));
     els.cancel = btn('cancel', t('cancel'));
@@ -92,11 +122,11 @@
     els.log = el('div', 'wbs-log');
 
     els.settings = el('div', 'wbs-settings');
-    body.append(statusLine, track, row1, row2, els.log, els.settings);
+    body.append(statusLine, track, row1, rangeRow, row2, els.log, els.settings);
 
     const footer = el('div', 'wbs-footer', t('disclaimer'));
 
-    root.append(header, body, footer);
+    root.append(header, els.updateBanner, body, footer);
     document.body.appendChild(root);
     setRunning(false);
     return root;
@@ -109,11 +139,37 @@
     els.pause.disabled = !running;
     els.cancel.disabled = !running;
     els.retry.disabled = running;
+    els.rangeStart.disabled = running;
+    els.rangeEnd.disabled = running;
   }
 
   window.WBS_Panel = {
-    mount() { build(); },
+    mount(version) { build(version); },
     on(action, cb) { handlers[action] = cb; },
+    getRange() {
+      return {
+        start: parseInt(els.rangeStart.value, 10) || 0,
+        end: parseInt(els.rangeEnd.value, 10) || 0
+      };
+    },
+    setRange(start, end) {
+      els.rangeStart.value = start > 0 ? start : '';
+      els.rangeEnd.value = end > 0 ? end : '';
+    },
+    showUpdate(latest, url) {
+      els.updateBanner.innerHTML = '';
+      const txt = el('span', '', t('updateAvailable', { v: latest }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = t('downloadUpdate');
+      const close = el('button', 'wbs-update-close', '×');
+      close.title = t('close');
+      close.addEventListener('click', () => { els.updateBanner.style.display = 'none'; });
+      els.updateBanner.append(txt, link, close);
+      els.updateBanner.style.display = '';
+    },
     setFound(n) {
       els.found.textContent = n > 0 ? `${n} ${t('itemsFound')}` : t('noItems');
     },
