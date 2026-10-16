@@ -31,6 +31,14 @@
     return i;
   }
 
+  function checkInput(id, value) {
+    const i = document.createElement('input');
+    i.type = 'checkbox';
+    i.id = 'wbs-set-' + id;
+    i.checked = !!value;
+    return i;
+  }
+
   function build() {
     if (root) return root;
 
@@ -144,21 +152,29 @@
         ['delayMin', t('settingDelay') + ' (min)', s.delayMin, 1, 30, 0.5],
         ['delayMax', t('settingDelay') + ' (max)', s.delayMax, 1, 60, 0.5],
         ['batchSize', t('settingBatch'), s.batchSize, 1, 50, 1],
+        ['cooldownEnabled', t('settingCooldownEnabled'), s.cooldownEnabled, 'check'],
         ['cooldownMin', t('settingCooldown') + ' (min)', s.cooldownMin, 5, 300, 1],
         ['cooldownMax', t('settingCooldown') + ' (max)', s.cooldownMax, 5, 600, 1],
         ['maxRetries', t('settingRetry'), s.maxRetries, 0, 10, 1],
         ['maxPages', t('settingMaxPages'), s.maxPages, 1, 100, 1]
       ];
-      for (const [id, label, val, min, max, step] of rows) {
+      for (const row of rows) {
+        const [id, label, val, kind] = row;
         const l = document.createElement('label');
-        l.append(el('span', '', label), numInput(id, val, min, max, step));
+        if (kind === 'check') {
+          l.classList.add('wbs-check-row');
+          l.append(checkInput(id, val), el('span', '', label));
+        } else {
+          l.append(el('span', '', label), numInput(id, val, row[3], row[4], row[5]));
+        }
         els.settings.appendChild(l);
       }
       const save = el('button', 'wbs-btn', t('save'));
       save.addEventListener('click', () => {
         const next = {};
-        for (const [id] of rows) {
-          next[id] = parseFloat(document.getElementById('wbs-set-' + id).value);
+        for (const [id, , , kind] of rows) {
+          const input = document.getElementById('wbs-set-' + id);
+          next[id] = kind === 'check' ? input.checked : parseFloat(input.value);
         }
         onSave(next);
         save.textContent = t('saved');

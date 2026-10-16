@@ -187,6 +187,18 @@
   font-size: 12px;
 }
 
+.wbs-settings label.wbs-check-row {
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+.wbs-settings input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #588a1b;
+  cursor: pointer;
+}
+
 .wbs-footer {
   padding: 0 12px 8px;
   font-size: 10px;

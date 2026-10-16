@@ -9,6 +9,7 @@
     delayMin: 2.5,
     delayMax: 5,
     batchSize: 10,
+    cooldownEnabled: true,
     cooldownMin: 20,
     cooldownMax: 45,
     maxRetries: 3,
@@ -55,6 +56,18 @@
       };
       tick();
     });
+  }
+
+  // 批次冷却：每秒把剩余秒数刷到状态栏；暂停时计时冻结，取消则立即返回 false
+  async function cooldown(totalSec) {
+    let remain = Math.max(1, Math.round(totalSec));
+    while (remain > 0) {
+      Panel.setStatus('cooldownMsg', { s: remain }, true);
+      const cont = await sleep(1000);
+      if (!cont) return false;
+      remain--;
+    }
+    return true;
   }
 
   function getAppId() {
@@ -296,6 +309,7 @@
     refreshPanel();
 
     const s = state.settings;
+    if (!s.cooldownEnabled) log(t('cooldownDisabled'), 'info');
     let sinceBatch = 0;
 
     for (let i = 0; i < state.queue.length; i++) {
@@ -320,14 +334,13 @@
       }
       refreshPanel();
 
-      // 批次冷却
+      // 批次冷却（可在设置中关闭；倒计时每秒刷新到状态栏）
       sinceBatch++;
-      if (sinceBatch >= s.batchSize && i < state.queue.length - 1 && !state.cancelled) {
+      if (s.cooldownEnabled && sinceBatch >= s.batchSize && i < state.queue.length - 1 && !state.cancelled) {
         sinceBatch = 0;
         const cd = Math.round(rand(s.cooldownMin, s.cooldownMax));
-        Panel.setStatus('statusCooldown', null, true);
         log(t('cooldownMsg', { s: cd }), 'info');
-        const c = await sleep(cd * 1000);
+        const c = await cooldown(cd);
         if (!c) break;
         Panel.setStatus('statusRunning');
       }
@@ -496,6 +509,7 @@
     state.settings = { ...DEFAULT_SETTINGS, ...(data[SETTINGS_KEY] || {}) };
     Panel.renderSettings(state.settings, async (next) => {
       // 基本校正
+      next.cooldownEnabled = !!next.cooldownEnabled;
       if (next.delayMax < next.delayMin) next.delayMax = next.delayMin;
       if (next.cooldownMax < next.cooldownMin) next.cooldownMax = next.cooldownMin;
       next.maxPages = Math.max(1, Math.min(100, Math.round(next.maxPages) || DEFAULT_SETTINGS.maxPages));

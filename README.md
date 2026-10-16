@@ -1,4 +1,4 @@
-# Workshop Batch Subscribe / Steam 创意工坊批量订阅
+﻿# Workshop Batch Subscribe / Steam 创意工坊批量订阅
 
 [English](#english) | [中文](#中文)
 
@@ -13,7 +13,7 @@
 - 一键订阅当前页全部物品（Steam 侧幂等，已订阅不会重复）
 - **全部页（自动翻页）**：本页订阅完后自动跳到下一页，直到工坊末页；可在设置中限定自动翻页上限（默认 20 页，可调 1–100）
 - 批量退订当前页（红色二次确认）
-- 拟人节奏：每项随机间隔、每批自动冷却、429/5xx 自动指数退避（尊重 `Retry-After`）
+- 拟人节奏：每项随机间隔、每批自动冷却（可一键关闭）、429/5xx 自动指数退避（尊重 `Retry-After`）；冷却倒计时在状态栏每秒动态显示剩余秒数，暂停时计时冻结
 - 暂停 / 继续 / 取消，**失败项精准重试**（只重跑失败的物品，不再整页重扫）
 - **操作日志**：每条带时间戳，跨翻页持久保留，可一键导出为 txt
 - 登录状态自动识别（通过浏览器 Cookie 接口读取登录态，不接触账号密码）
@@ -34,7 +34,7 @@
 - **全部页（自动翻页）**：自动逐页处理直到末页；翻页中途不要手动切换到其他工坊页面
 - **退订本页全部**：退订当前页所有物品（需确认）
 - **≡** 展开/收起日志，**⇩** 导出日志，**—** 折叠面板，**⚙** 打开设置
-- 设置项：每项间隔、每批数量、批次冷却、单项重试次数、自动翻页上限。默认值已按保守策略配置，**请勿把间隔调得过短**
+- 设置项：每项间隔、每批数量、**批次冷却开关**（关闭后状态栏会有风险提示）、批次冷却时长、单项重试次数、自动翻页上限。默认值已按保守策略配置，**请勿把间隔调得过短**
 
 ### 权限说明
 
@@ -63,7 +63,7 @@ A Manifest V3 Edge / Chrome extension to subscribe to all Steam Workshop items o
 - One-click subscribe to all items on the current page (idempotent on Steam's side)
 - **All Pages (auto page-turn)**: finishes a page and automatically moves to the next, until the workshop's last page; a configurable cap (default 20, range 1–100) prevents runaway runs
 - Batch unsubscribe (with confirmation)
-- Human-like pacing: random per-item delay, batch cooldown, exponential backoff honoring `Retry-After` on 429/5xx
+- Human-like pacing: random per-item delay, optional batch cooldown (toggle), exponential backoff honoring `Retry-After` on 429/5xx; live cooldown countdown ticks down every second in the status line and freezes while paused
 - Pause / resume / cancel, and **targeted retry** that re-runs only failed items
 - **Timestamped operation log**, persisted across page turns, exportable to a txt file
 - Automatic login detection via the browser cookie API (never touches your password)
@@ -97,3 +97,6 @@ For personal use only. Bulk workshop actions may violate the Steam Terms of Serv
 ## License
 
 MIT
+
+
+

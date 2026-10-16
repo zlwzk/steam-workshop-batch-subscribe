@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Workshop Batch Subscribe",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Subscribe to all Steam Workshop items on the current browse page with one click. Human-like pacing, local-only data. / 一键订阅 Steam 创意工坊当前页全部 Mod，拟人节奏，数据仅存本地。",
   "permissions": ["storage", "cookies"],
   "host_permissions": [
