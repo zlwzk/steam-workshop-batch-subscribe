@@ -44,10 +44,19 @@
     const gear = el('button', 'wbs-icon-btn', '⚙');
     gear.title = t('settings');
     gear.addEventListener('click', () => els.settings.classList.toggle('wbs-open'));
+    const logExp = el('button', 'wbs-icon-btn', '⇩');
+    logExp.title = t('exportLog');
+    logExp.addEventListener('click', () => handlers['exportLog'] && handlers['exportLog']());
     const logTgl = el('button', 'wbs-icon-btn', '≡');
     logTgl.title = t('log');
     logTgl.addEventListener('click', () => els.log.classList.toggle('wbs-open'));
-    header.append(title, els.mode, logTgl, gear);
+    const collapse = el('button', 'wbs-icon-btn', '—');
+    collapse.title = t('collapse');
+    collapse.addEventListener('click', () => {
+      const collapsed = root.classList.toggle('wbs-collapsed');
+      collapse.textContent = collapsed ? '□' : '—';
+    });
+    header.append(title, els.mode, logExp, logTgl, gear, collapse);
 
     // body
     const body = el('div', 'wbs-body');
@@ -115,11 +124,18 @@
     setPauseLabel(paused) {
       els.pause.textContent = paused ? t('resume') : t('pause');
     },
-    log(msg, cls) {
-      const line = el('div', cls ? 'wbs-log-' + cls : '', msg);
+    log(msg, cls, ts) {
+      const d = new Date(ts || Date.now());
+      const p = (n) => String(n).padStart(2, '0');
+      const stamp = `[${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}]`;
+      const line = el('div', cls ? 'wbs-log-' + cls : '');
+      line.append(el('span', 'wbs-log-ts', stamp), document.createTextNode(' ' + msg));
       els.log.appendChild(line);
       while (els.log.children.length > 200) els.log.removeChild(els.log.firstChild);
       els.log.scrollTop = els.log.scrollHeight;
+    },
+    restoreLogs(entries) {
+      for (const e of entries) this.log(e.msg, e.cls, e.ts);
     },
     clearLog() { els.log.innerHTML = ''; },
     renderSettings(s, onSave) {
@@ -130,7 +146,8 @@
         ['batchSize', t('settingBatch'), s.batchSize, 1, 50, 1],
         ['cooldownMin', t('settingCooldown') + ' (min)', s.cooldownMin, 5, 300, 1],
         ['cooldownMax', t('settingCooldown') + ' (max)', s.cooldownMax, 5, 600, 1],
-        ['maxRetries', t('settingRetry'), s.maxRetries, 0, 10, 1]
+        ['maxRetries', t('settingRetry'), s.maxRetries, 0, 10, 1],
+        ['maxPages', t('settingMaxPages'), s.maxPages, 1, 100, 1]
       ];
       for (const [id, label, val, min, max, step] of rows) {
         const l = document.createElement('label');

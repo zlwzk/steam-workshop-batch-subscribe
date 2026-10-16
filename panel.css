@@ -20,6 +20,11 @@
 
 #wbs-panel * { box-sizing: border-box; }
 
+/* 折叠模式：只保留标题栏 */
+#wbs-panel.wbs-collapsed .wbs-body,
+#wbs-panel.wbs-collapsed .wbs-footer { display: none; }
+#wbs-panel.wbs-collapsed { width: 220px; }
+
 .wbs-header {
   display: flex;
   align-items: center;
@@ -147,6 +152,7 @@
 .wbs-log .wbs-log-ok { color: #a4d007; }
 .wbs-log .wbs-log-fail { color: #e08f8f; }
 .wbs-log .wbs-log-info { color: #66c0f4; }
+.wbs-log .wbs-log-ts { color: #55606a; }
 
 .wbs-log::-webkit-scrollbar { width: 8px; }
 .wbs-log::-webkit-scrollbar-thumb { background: #2a475e; border-radius: 4px; }

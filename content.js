@@ -1,4 +1,4 @@
-/* content.js — 扫描、队列引擎、拟人节奏、跨页恢复 */
+/* content.js — 扫描、队列引擎、拟人节奏、自动翻页、持久化日志 */
 (function () {
   'use strict';
 
@@ -11,24 +11,31 @@
     batchSize: 10,
     cooldownMin: 20,
     cooldownMax: 45,
-    maxRetries: 3
+    maxRetries: 3,
+    maxPages: 20
   };
 
   const JOB_KEY = 'wbs_job';
   const SETTINGS_KEY = 'wbs_settings';
+  const LOG_KEY = 'wbs_log';
+  const LOG_MAX = 300;
 
   const state = {
     running: false,
     paused: false,
     cancelled: false,
     mode: 'subscribe',
+    auto: false,            // 自动翻页模式
     queue: [],
     total: 0,
     done: 0,
     ok: 0,
     fail: 0,
-    pagesLeft: 0,
-    settings: { ...DEFAULT_SETTINGS }
+    pagesDone: 0,
+    lastFailed: [],
+    settings: { ...DEFAULT_SETTINGS },
+    auth: { loggedIn: false, sessionId: null },
+    logCache: []
   };
 
   /* ---------- 工具 ---------- */
@@ -50,14 +57,6 @@
     });
   }
 
-  function getCookie(name) {
-    const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
-    return m ? m[1] : null;
-  }
-
-  const isLoggedIn = () => !!getCookie('steamLoginSecure');
-  const getSessionId = () => getCookie('sessionid');
-
   function getAppId() {
     const m = location.search.match(/[?&]appid=(\d+)/);
     return m ? m[1] : null;
@@ -72,6 +71,113 @@
     const url = new URL(location.href);
     url.searchParams.set('p', String(p));
     return url.toString();
+  }
+
+  // 页面签名：同一游戏、同一筛选/排序才允许跨页续跑，防止串页
+  function pageSignature() {
+    const u = new URL(location.href);
+    u.searchParams.delete('p');
+    return u.pathname + u.search;
+  }
+
+  /* ---------- 总页数探测（读分页 UI 的数字按钮，取最大值） ---------- */
+
+  // 返回最后一页页码；0 = 未发现分页（单页或尚未渲染）
+  function getLastPage() {
+    const groups = new Map(); // 父元素 -> {count, max}
+    document.querySelectorAll('div[role="button"]').forEach((e) => {
+      const txt = (e.textContent || '').trim().replace(/[,\s]/g, '');
+      if (!/^\d{1,7}$/.test(txt)) return;
+      const p = e.parentElement;
+      if (!p) return;
+      const n = parseInt(txt, 10);
+      const g = groups.get(p) || { count: 0, max: 0 };
+      g.count++;
+      g.max = Math.max(g.max, n);
+      groups.set(p, g);
+    });
+    let last = 0;
+    for (const g of groups.values()) {
+      if (g.count >= 2 && g.max > last) last = g.max;
+    }
+    return last;
+  }
+
+  /* ---------- 登录态（后台读 HttpOnly Cookie，DOM 兜底） ---------- */
+
+  function fallbackSessionId() {
+    const m = document.cookie.match(/(?:^|;\s*)sessionid=([^;]+)/);
+    return m ? m[1] : null;
+  }
+
+  function domLoggedInHint() {
+    if (document.querySelector('#account_pulldown')) return true;
+    for (const a of document.querySelectorAll('a[href*="login"]')) {
+      if (/log\s*in|登录/i.test(a.textContent || '')) return false;
+    }
+    return null;
+  }
+
+  async function refreshAuth() {
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'wbs:auth' });
+      if (r && r.loggedIn !== null && r.loggedIn !== undefined) {
+        state.auth = {
+          loggedIn: !!r.loggedIn,
+          sessionId: r.sessionId || fallbackSessionId()
+        };
+        return state.auth;
+      }
+    } catch (e) { /* 后台不可用时走 DOM 兜底 */ }
+    state.auth = {
+      loggedIn: domLoggedInHint() === true,
+      sessionId: fallbackSessionId()
+    };
+    return state.auth;
+  }
+
+  const authReady = () => state.auth.loggedIn && !!state.auth.sessionId;
+
+  /* ---------- 持久化日志 ---------- */
+
+  async function loadLog() {
+    const data = await chrome.storage.local.get(LOG_KEY);
+    state.logCache = Array.isArray(data[LOG_KEY]) ? data[LOG_KEY] : [];
+    Panel.restoreLogs(state.logCache);
+  }
+
+  let logWriteChain = Promise.resolve();
+  function persistLog(entry) {
+    state.logCache.push(entry);
+    if (state.logCache.length > LOG_MAX) {
+      state.logCache = state.logCache.slice(-LOG_MAX);
+    }
+    // 串行写入，避免并发覆盖
+    logWriteChain = logWriteChain.then(() =>
+      chrome.storage.local.set({ [LOG_KEY]: state.logCache }).catch(() => {})
+    );
+    return logWriteChain;
+  }
+
+  function log(msg, cls) {
+    const entry = { ts: Date.now(), msg, cls: cls || '' };
+    Panel.log(entry.msg, entry.cls, entry.ts);
+    persistLog(entry);
+  }
+
+  function exportLog() {
+    const fmt = (ts) => {
+      const d = new Date(ts);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    };
+    const lines = state.logCache.map((e) => `[${fmt(e.ts)}]${e.cls ? ' [' + e.cls.toUpperCase() + ']' : ''} ${e.msg}`);
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `workshop-batch-subscribe-log-${Date.now()}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
   /* ---------- 页面扫描 ---------- */
@@ -105,7 +211,7 @@
       body: new URLSearchParams({
         id,
         appid: getAppId(),
-        sessionid: getSessionId()
+        sessionid: state.auth.sessionId || ''
       }).toString()
     });
     if (resp.redirected && /login/i.test(resp.url)) {
@@ -119,17 +225,35 @@
       e.retryAfter = parseInt(resp.headers.get('Retry-After') || '0', 10);
       throw e;
     }
-    return resp.ok;
+    if (!resp.ok) return false;
+
+    // 校验业务结果：Steam 返回 JSON { success: 1 }
+    let j = null;
+    try { j = JSON.parse(await resp.text()); } catch { /* 非 JSON */ }
+    if (!j) {
+      // 返回 HTML：多半被踢到登录页
+      const e = new Error('auth');
+      e.auth = true;
+      throw e;
+    }
+    return String(j.success) === '1';
   }
 
   async function callWithRetries(item) {
     const max = state.settings.maxRetries;
+    let authRefreshed = false;
     for (let attempt = 1; attempt <= max + 1; attempt++) {
       try {
         return await callSteam(item.id);
       } catch (e) {
         if (e.auth) {
-          Panel.log(t('notLoggedIn'), 'fail');
+          // 先尝试刷新一次会话（Cookie 可能轮换）
+          if (!authRefreshed) {
+            authRefreshed = true;
+            await refreshAuth();
+            if (authReady()) continue;
+          }
+          log(t('notLoggedIn'), 'fail');
           Panel.setStatus('statusBackoff', null, true);
           state.cancelled = true;
           return false;
@@ -137,7 +261,7 @@
         if (attempt > max) return false;
         let waitSec = e.retryAfter > 0 ? Math.min(e.retryAfter, 300) : Math.pow(2, attempt) * 5;
         Panel.setStatus('statusBackoff', null, true);
-        Panel.log(t('waitingRetry', { s: waitSec, n: attempt }), 'info');
+        log(t('waitingRetry', { s: waitSec, n: attempt }), 'info');
         const cont = await sleep(waitSec * 1000);
         if (!cont) return false;
       }
@@ -188,10 +312,11 @@
       state.done++;
       if (okItem) {
         state.ok++;
-        Panel.log(`[${t('itemOk')}] ${item.title}`, 'ok');
+        log(`[${t('itemOk')}] ${item.title}`, 'ok');
       } else {
         state.fail++;
-        Panel.log(`[${t('itemFail')}] ${item.title}`, 'fail');
+        state.lastFailed.push(item);
+        log(`[${t('itemFail')}] ${item.title}`, 'fail');
       }
       refreshPanel();
 
@@ -201,18 +326,37 @@
         sinceBatch = 0;
         const cd = Math.round(rand(s.cooldownMin, s.cooldownMax));
         Panel.setStatus('statusCooldown', null, true);
-        Panel.log(t('cooldownMsg', { s: cd }), 'info');
+        log(t('cooldownMsg', { s: cd }), 'info');
         const c = await sleep(cd * 1000);
         if (!c) break;
         Panel.setStatus('statusRunning');
       }
     }
 
-    // 跨页
-    if (!state.cancelled && state.pagesLeft > 1) {
+    // 自动翻页：本页完成后跳下一页；末页/单页/空页/上限四种终止条件
+    if (!state.cancelled && state.auto) {
+      const cur = getPageNo();
+      let last = getLastPage();
+      if (last === 0) {
+        // 分页可能尚未渲染，等一下再确认一次
+        await sleep(1500);
+        last = getLastPage();
+      }
+      if (last === 0 || cur >= last) {
+        log(t('lastPage'), 'info');
+        finish('statusDone');
+        return;
+      }
+      if (state.pagesDone + 1 >= s.maxPages) {
+        log(t('maxPagesHit', { n: s.maxPages }), 'info');
+        finish('statusDone');
+        return;
+      }
       await saveJob();
+      await logWriteChain; // 确保日志落盘后再跳页
       const next = getPageNo() + 1;
-      Panel.log(t('nextPage', { p: next }), 'info');
+      log(t('nextPage', { p: next }), 'info');
+      await logWriteChain;
       location.href = buildPageUrl(next);
       return; // 页面即将卸载
     }
@@ -224,7 +368,7 @@
     state.running = false;
     Panel.setRunning(false);
     Panel.setStatus(statusKey);
-    Panel.log(t('doneSummary', { ok: state.ok, fail: state.fail }), state.fail > 0 ? 'info' : 'ok');
+    log(t('doneSummary', { ok: state.ok, fail: state.fail }), state.fail > 0 ? 'info' : 'ok');
     Panel.setProgress(state.done, state.total || 1);
     updateBadge();
     clearJob();
@@ -236,9 +380,14 @@
     const job = {
       active: true,
       mode: state.mode,
-      pagesLeft: state.pagesLeft - 1,
+      auto: state.auto,
       ok: state.ok,
-      fail: state.fail
+      fail: state.fail,
+      pagesDone: state.pagesDone + 1,
+      failed: state.lastFailed,
+      firstId: state.queue.length ? state.queue[0].id : null,
+      sig: pageSignature(),
+      ts: Date.now()
     };
     await chrome.storage.local.set({ [JOB_KEY]: job });
   }
@@ -251,50 +400,93 @@
     const data = await chrome.storage.local.get(JOB_KEY);
     const job = data[JOB_KEY];
     if (!job || !job.active) return;
-    if (!isLoggedIn()) {
-      Panel.log(t('notLoggedIn'), 'fail');
+
+    // 防串页：签名不一致（换了游戏/筛选）则丢弃旧任务
+    if (job.sig && job.sig !== pageSignature()) {
       await clearJob();
       return;
     }
+
+    // 已知总页数且已越界：直接终止（无需登录）
+    const cur = getPageNo();
+    const last = getLastPage();
+    if (job.auto && last > 0 && cur > last) {
+      log(t('lastPage'), 'info');
+      log(t('doneSummary', { ok: job.ok || 0, fail: job.fail || 0 }), (job.fail || 0) > 0 ? 'info' : 'ok');
+      Panel.setStatus('statusDone');
+      await clearJob();
+      return;
+    }
+
+    // 空页 = 自动翻页的终止条件（无需登录即可判定，先判终止再验登录）
     const items = scanItems();
-    if (items.length === 0) {
-      Panel.log(t('noItems'), 'fail');
+    // 重复页守卫：Steam 对越界页码会钳制回末页，首项与上页相同即说明未再前进
+    if (items.length > 0 && job.auto && job.firstId && items[0].id === job.firstId) {
+      log(t('lastPage'), 'info');
+      log(t('doneSummary', { ok: job.ok || 0, fail: job.fail || 0 }), (job.fail || 0) > 0 ? 'info' : 'ok');
+      Panel.setStatus('statusDone');
       await clearJob();
       return;
     }
-    Panel.log(t('nextPage', { p: getPageNo() }), 'info');
+    if (items.length === 0) {
+      if (job.auto) {
+        log(t('lastPage'), 'info');
+        log(t('doneSummary', { ok: job.ok || 0, fail: job.fail || 0 }), (job.fail || 0) > 0 ? 'info' : 'ok');
+        Panel.setStatus('statusDone');
+      } else {
+        log(t('noItems'), 'fail');
+      }
+      await clearJob();
+      return;
+    }
+
+    // 登录失效：保留任务，等用户重新登录后可继续
+    await refreshAuth();
+    if (!authReady()) {
+      log(t('notLoggedIn'), 'fail');
+      Panel.setStatus('statusIdle');
+      return;
+    }
+
+    log(t('nextPage', { p: getPageNo() }), 'info');
     state.mode = job.mode;
-    state.pagesLeft = job.pagesLeft;
-    state.ok = job.ok;
-    state.fail = job.fail;
-    startQueue(items, job.pagesLeft);
+    state.auto = !!job.auto;
+    state.ok = job.ok || 0;
+    state.fail = job.fail || 0;
+    state.pagesDone = job.pagesDone || 0;
+    state.lastFailed = Array.isArray(job.failed) ? job.failed : [];
+    startQueue(items);
   }
 
   /* ---------- 启动入口 ---------- */
 
-  function startQueue(items, pagesLeft) {
+  function startQueue(items) {
     state.queue = items;
     state.total = items.length;
     state.done = 0;
-    state.pagesLeft = pagesLeft || 1;
     runQueue();
   }
 
-  function guardStart(mode, pagesLeft) {
-    if (!isLoggedIn()) {
-      Panel.log(t('notLoggedIn'), 'fail');
+  async function begin(mode, auto, itemsOverride) {
+    if (state.running) return;
+    await refreshAuth();
+    if (!authReady()) {
+      log(t('notLoggedIn'), 'fail');
       Panel.setStatus('statusIdle');
       return;
     }
-    const items = scanItems();
+    const items = itemsOverride || scanItems();
     if (items.length === 0) {
-      Panel.log(t('noItems'), 'fail');
+      log(t('noItems'), 'fail');
       return;
     }
     state.mode = mode;
+    state.auto = auto;
     state.ok = 0;
     state.fail = 0;
-    startQueue(items, pagesLeft || 1);
+    state.pagesDone = 0;
+    state.lastFailed = [];
+    startQueue(items);
   }
 
   /* ---------- 设置 ---------- */
@@ -306,6 +498,7 @@
       // 基本校正
       if (next.delayMax < next.delayMin) next.delayMax = next.delayMin;
       if (next.cooldownMax < next.cooldownMin) next.cooldownMax = next.cooldownMin;
+      next.maxPages = Math.max(1, Math.min(100, Math.round(next.maxPages) || DEFAULT_SETTINGS.maxPages));
       state.settings = { ...state.settings, ...next };
       await chrome.storage.local.set({ [SETTINGS_KEY]: state.settings });
     });
@@ -317,16 +510,11 @@
     Panel.mount();
     Panel.setFound(scanItems().length);
 
-    Panel.on('subscribePage', () => guardStart('subscribe', 1));
-    Panel.on('subscribePages', () => {
-      const input = window.prompt(t('pagesPrompt'), '3');
-      if (input == null) return;
-      const n = Math.max(1, Math.min(20, parseInt(input, 10) || 1));
-      guardStart('subscribe', n);
-    });
+    Panel.on('subscribePage', () => begin('subscribe', false));
+    Panel.on('subscribePages', () => begin('subscribe', true));
     Panel.on('unsubscribePage', () => {
       if (!window.confirm(t('unsubConfirm'))) return;
-      guardStart('unsubscribe', 1);
+      begin('unsubscribe', false);
     });
     Panel.on('pause', () => {
       if (!state.running) return;
@@ -339,11 +527,22 @@
       state.paused = false;
     });
     Panel.on('retryFailed', () => {
-      // 简化：重扫本页再跑一轮（Steam 侧幂等，已成功的不会产生副作用）
-      guardStart(state.mode, 1);
+      // 精准重试失败项（无失败项时忽略）
+      if (state.lastFailed.length === 0) {
+        log(t('noFailed'), 'info');
+        return;
+      }
+      const items = state.lastFailed.slice();
+      begin(state.mode, false, items);
     });
+    Panel.on('exportLog', exportLog);
 
-    loadSettings().then(resumeJobIfAny);
+    // 初始化：恢复日志 → 检测登录态并明示 → 加载设置 → 恢复跨页任务
+    loadLog()
+      .then(refreshAuth)
+      .then(() => log(t(authReady() ? 'authOk' : 'notLoggedIn'), authReady() ? 'info' : 'fail'))
+      .then(loadSettings)
+      .then(resumeJobIfAny);
   }
 
   if (document.readyState === 'loading') {
