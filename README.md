@@ -25,13 +25,24 @@
 
 ### 安装（Edge / Chrome）
 
+本扩展是标准的 Chromium Manifest V3 扩展，**同一份文件同时支持 Edge 和 Chrome，无需下载不同版本**（Release 中带 `-chrome` 后缀的 zip 内容与标准版完全一致，仅为 Chrome 用户下载方便而提供）。
+
+**Edge：**
+
 1. 下载本仓库（或 Release 中的 zip 并解压）
-2. 打开 `edge://extensions/`（Chrome 为 `chrome://extensions/`），开启「开发人员模式」
+2. 打开 `edge://extensions/`，开启「开发人员模式」
 3. 点击「加载解压缩的扩展」，选择本文件夹
 4. 打开任意创意工坊浏览页（如 `steamcommunity.com/workshop/browse/?appid=730`），右下角会出现「批量订阅」面板
 5. 面板日志出现「已检测到 Steam 登录」即表示登录态识别正常；若提示未登录，请先在浏览器登录 Steam
 
-> 更新方式：开发人员模式加载的扩展**不会自动安装更新**。下载新版并替换文件夹后，到 `edge://extensions/` 点击该扩展的「重新加载」；若新增了权限，浏览器会提示重新确认。
+**Chrome：**
+
+1. 下载 Release 中的 `steam-workshop-batch-subscribe-chrome-vX.Y.Z.zip`（或标准版 zip）并解压
+2. 打开 `chrome://extensions/`，打开右上角「开发者模式」
+3. 点击「加载已解压的扩展程序」，选择解压出的 `steam-workshop-batch-subscribe` 文件夹
+4. 打开任意创意工坊浏览页，右下角出现面板即安装成功；日志提示「已检测到 Steam 登录」表示登录态正常（请在 Chrome 中先登录 Steam）
+
+> 更新方式：开发人员模式加载的扩展**不会自动安装更新**。下载新版并替换文件夹后，到 `edge://extensions/` / `chrome://extensions/` 点击该扩展的「重新加载」；若新增了权限，浏览器会提示重新确认。
 
 ### 使用
 
@@ -82,13 +93,24 @@ A Manifest V3 Edge / Chrome extension to subscribe to all Steam Workshop items o
 
 ### Install (Edge / Chrome)
 
-1. Download this repo (or unzip the Release package)
-2. Open `edge://extensions/` (or `chrome://extensions/`), enable **Developer mode**
+This is a standard Chromium Manifest V3 extension — **the exact same files run in both Edge and Chrome; there is no separate build** (the `-chrome` zip attached to releases is byte-identical to the standard zip, just named for convenience).
+
+**Edge:**
+
+1. Download this repo (or unzip a Release package)
+2. Open `edge://extensions/` and enable **Developer mode**
 3. Click **Load unpacked**, select this folder
 4. Open any Workshop browse page (e.g. `steamcommunity.com/workshop/browse/?appid=730`) — the panel appears at the bottom-right
 5. "Steam login detected" in the log means auth works; if it says not logged in, sign in to Steam first
 
-> Updating: developer-mode extensions are **never auto-installed**. Download a new release, replace the folder, then click **Reload** on `edge://extensions/`; the browser may ask you to re-approve newly added permissions.
+**Chrome:**
+
+1. Download `steam-workshop-batch-subscribe-chrome-vX.Y.Z.zip` (or the standard zip) from Releases and unzip it
+2. Open `chrome://extensions/` and toggle **Developer mode** (top-right)
+3. Click **Load unpacked** and select the unzipped `steam-workshop-batch-subscribe` folder
+4. Open any Workshop browse page — the panel appears at the bottom-right. Make sure you are signed in to Steam in Chrome
+
+> Updating: developer-mode extensions are **never auto-installed**. Download a new release, replace the folder, then click **Reload** on `edge://extensions/` / `chrome://extensions/`; the browser may ask you to re-approve newly added permissions.
 
 ### Usage
 
