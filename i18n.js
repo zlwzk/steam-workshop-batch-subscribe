@@ -1,0 +1,111 @@
+/* i18n.js — 中英双语，按 Steam_Language cookie / 浏览器语言自动切换 */
+(function () {
+  'use strict';
+
+  const MESSAGES = {
+    en: {
+      panelTitle: 'Batch Subscribe',
+      itemsFound: 'items on this page',
+      subscribePage: 'Subscribe This Page',
+      subscribePages: 'Multi-Page Mode',
+      unsubscribePage: 'Unsubscribe This Page',
+      pause: 'Pause',
+      resume: 'Resume',
+      cancel: 'Cancel',
+      retryFailed: 'Retry Failed',
+      settings: 'Settings',
+      log: 'Log',
+      progress: 'Progress',
+      statusIdle: 'Idle',
+      statusRunning: 'Running',
+      statusPaused: 'Paused',
+      statusCooldown: 'Cooling down',
+      statusBackoff: 'Rate-limited, waiting',
+      statusDone: 'Done',
+      statusCancelled: 'Cancelled',
+      notLoggedIn: 'You are not logged in to Steam. Please log in first.',
+      noItems: 'No workshop items found on this page.',
+      unsubConfirm: 'This will UNSUBSCRIBE all items on this page. Are you sure?',
+      pagesPrompt: 'How many pages to process in total (including this one)? 1-20',
+      doneSummary: 'Finished. Success: {ok}, Failed: {fail}',
+      nextPage: 'Moving to page {p}…',
+      waitingRetry: 'Retry in {s}s (attempt {n})…',
+      cooldownMsg: 'Cooling down {s}s to stay under Steam limits…',
+      itemOk: 'OK',
+      itemFail: 'FAIL',
+      settingDelay: 'Delay between items (sec)',
+      settingBatch: 'Items per batch',
+      settingCooldown: 'Batch cooldown (sec)',
+      settingRetry: 'Max retries per item',
+      save: 'Save',
+      saved: 'Saved.',
+      disclaimer: 'For personal use only. Data stays in your browser.',
+      modeSubscribe: 'SUBSCRIBE',
+      modeUnsubscribe: 'UNSUBSCRIBE',
+      close: 'Close'
+    },
+    zh: {
+      panelTitle: '批量订阅',
+      itemsFound: '个物品',
+      subscribePage: '订阅本页全部',
+      subscribePages: '跨页订阅',
+      unsubscribePage: '退订本页全部',
+      pause: '暂停',
+      resume: '继续',
+      cancel: '取消',
+      retryFailed: '重试失败项',
+      settings: '设置',
+      log: '日志',
+      progress: '进度',
+      statusIdle: '空闲',
+      statusRunning: '进行中',
+      statusPaused: '已暂停',
+      statusCooldown: '批次冷却中',
+      statusBackoff: '触发限制，等待中',
+      statusDone: '已完成',
+      statusCancelled: '已取消',
+      notLoggedIn: '未登录 Steam，请先登录后再使用。',
+      noItems: '本页未发现创意工坊物品。',
+      unsubConfirm: '即将退订本页全部物品，确定继续吗？',
+      pagesPrompt: '共处理多少页（含本页）？1-20',
+      doneSummary: '完成。成功 {ok} 个，失败 {fail} 个。',
+      nextPage: '正在前往第 {p} 页…',
+      waitingRetry: '{s} 秒后重试（第 {n} 次）…',
+      cooldownMsg: '冷却 {s} 秒，避免触发 Steam 限制…',
+      itemOk: '成功',
+      itemFail: '失败',
+      settingDelay: '每项间隔（秒）',
+      settingBatch: '每批数量',
+      settingCooldown: '批次冷却（秒）',
+      settingRetry: '单项最大重试次数',
+      save: '保存',
+      saved: '已保存。',
+      disclaimer: '仅限个人使用，数据保存在本地浏览器。',
+      modeSubscribe: '订阅',
+      modeUnsubscribe: '退订',
+      close: '关闭'
+    }
+  };
+
+  function detectLang() {
+    const m = document.cookie.match(/(?:^|;\s*)Steam_Language=([^;]+)/);
+    const lang = (m ? m[1] : (navigator.language || 'en')).toLowerCase();
+    return lang.startsWith('zh') || lang.includes('schinese') || lang.includes('tchinese') ? 'zh' : 'en';
+  }
+
+  const lang = detectLang();
+  const dict = MESSAGES[lang];
+
+  window.WBS_I18N = {
+    lang,
+    t(key, vars) {
+      let s = dict[key] || MESSAGES.en[key] || key;
+      if (vars) {
+        for (const k of Object.keys(vars)) {
+          s = s.replace('{' + k + '}', String(vars[k]));
+        }
+      }
+      return s;
+    }
+  };
+})();

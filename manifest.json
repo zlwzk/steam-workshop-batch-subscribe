@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Workshop Batch Subscribe",
+  "version": "1.0.0",
+  "description": "Subscribe to all Steam Workshop items on the current browse page with one click. Human-like pacing, local-only data. / 一键订阅 Steam 创意工坊当前页全部 Mod，拟人节奏，数据仅存本地。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://steamcommunity.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://steamcommunity.com/workshop/browse/*"
+      ],
+      "js": ["i18n.js", "panel.js", "content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Workshop Batch Subscribe",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
