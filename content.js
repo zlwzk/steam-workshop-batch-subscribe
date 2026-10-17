@@ -101,20 +101,45 @@
 
   // 返回最后一页页码；0 = 未发现分页（单页或尚未渲染）
   function getLastPage() {
+    // 覆盖 Steam 创意工坊新旧版分页 DOM：div[role=button]、a、button、
+    // span[role=button]、以及带 page/pager/pagn 类名或 aria-label 的容器内元素
+    const selectors = [
+      'div[role="button"]',
+      'span[role="button"]',
+      'a[href*="?p="]',
+      'a',
+      'button',
+      '[class*="page" i]',
+      '[class*="pager" i]',
+      '[class*="pagn" i]',
+      '[aria-label*="page" i]',
+      '[aria-label*="pager" i]'
+    ];
+    const candidates = new Set();
+    for (const sel of selectors) {
+      try {
+        document.querySelectorAll(sel).forEach((e) => candidates.add(e));
+      } catch { /* 选择器在某些浏览器可能不支持，跳过 */ }
+    }
+
     const groups = new Map(); // 父元素 -> {count, max}
-    document.querySelectorAll('div[role="button"]').forEach((e) => {
+    for (const e of candidates) {
+      // 只统计可见元素，排除 display:none 的占位
+      if (e.offsetParent === null) continue;
       const txt = (e.textContent || '').trim().replace(/[,\s]/g, '');
-      if (!/^\d{1,7}$/.test(txt)) return;
-      const p = e.parentElement;
-      if (!p) return;
+      if (!/^\d{1,7}$/.test(txt)) continue;
       const n = parseInt(txt, 10);
+      if (n < 1) continue;
+      const p = e.parentElement;
+      if (!p) continue;
       const g = groups.get(p) || { count: 0, max: 0 };
       g.count++;
       g.max = Math.max(g.max, n);
       groups.set(p, g);
-    });
+    }
     let last = 0;
     for (const g of groups.values()) {
+      // 至少 2 个数字按钮才认为是分页区，排除单个数字（如物品数量）
       if (g.count >= 2 && g.max > last) last = g.max;
     }
     return last;
@@ -361,7 +386,9 @@
       log(t('pageDone', { p: getPageNo(), ok: state.pageOk, fail: state.pageFail }), 'info');
     }
 
-    // 自动翻页：本页完成后跳下一页；末页/单页/空页/上限四种终止条件
+    // 自动翻页：本页完成后跳下一页；末页/上限两种终止条件
+    // 注意：last===0 时（分页 UI 探测失败）不直接停止，而是尝试翻到下一页，
+    // 由 resumeJobIfAny 中的重复页守卫（首项 ID 相同）判定是否真的到末页
     if (!state.cancelled && state.auto) {
       const cur = getPageNo();
       let last = getLastPage();
@@ -370,7 +397,7 @@
         await sleep(1500);
         last = getLastPage();
       }
-      if (last === 0 || cur >= last) {
+      if (last > 0 && cur >= last) {
         log(t('lastPage'), 'info');
         finish('statusDone');
         return;
@@ -383,7 +410,11 @@
       await saveJob();
       await logWriteChain; // 确保日志落盘后再跳页
       const next = getPageNo() + 1;
-      log(t('nextPage', { p: next }), 'info');
+      if (last === 0) {
+        log(t('nextPageProbe', { p: next }), 'info');
+      } else {
+        log(t('nextPage', { p: next }), 'info');
+      }
       await logWriteChain;
       location.href = buildPageUrl(next);
       return; // 页面即将卸载

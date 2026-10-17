@@ -129,7 +129,84 @@
     root.append(header, els.updateBanner, body, footer);
     document.body.appendChild(root);
     setRunning(false);
+    setupDrag(header);
     return root;
+  }
+
+  /* ---------- 面板拖动（header 区域可拖，按钮区域不触发） ---------- */
+
+  const POS_KEY = 'wbs_panel_pos';
+
+  function restorePosition() {
+    if (!root) return;
+    try {
+      const raw = localStorage.getItem(POS_KEY);
+      if (!raw) return;
+      const pos = JSON.parse(raw);
+      if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') {
+        // 切换为 left/top 定位，清除默认的 right/bottom
+        root.style.right = 'auto';
+        root.style.bottom = 'auto';
+        // 边界校正（窗口尺寸可能已变）
+        const maxLeft = window.innerWidth - root.offsetWidth;
+        const maxTop = window.innerHeight - root.offsetHeight;
+        const left = Math.max(0, Math.min(pos.left, maxLeft));
+        const top = Math.max(0, Math.min(pos.top, maxTop));
+        root.style.left = left + 'px';
+        root.style.top = top + 'px';
+      }
+    } catch { /* localStorage 不可用时忽略 */ }
+  }
+
+  function setupDrag(header) {
+    let dragging = false;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    const onMouseDown = (e) => {
+      // 点到按钮/链接/输入框时不触发拖动
+      if (e.target.closest('button, a, input, select, textarea')) return;
+      dragging = true;
+      const rect = root.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      // 切换为 left/top 定位
+      root.style.right = 'auto';
+      root.style.bottom = 'auto';
+      root.style.left = startLeft + 'px';
+      root.style.top = startTop + 'px';
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      let left = startLeft + dx;
+      let top = startTop + dy;
+      // 边界限制，不允许拖出可视区
+      const maxLeft = window.innerWidth - root.offsetWidth;
+      const maxTop = window.innerHeight - root.offsetHeight;
+      left = Math.max(0, Math.min(left, maxLeft));
+      top = Math.max(0, Math.min(top, maxTop));
+      root.style.left = left + 'px';
+      root.style.top = top + 'px';
+    };
+
+    const onMouseUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      try {
+        const left = parseInt(root.style.left, 10) || 0;
+        const top = parseInt(root.style.top, 10) || 0;
+        localStorage.setItem(POS_KEY, JSON.stringify({ left, top }));
+      } catch { /* 忽略存储失败 */ }
+    };
+
+    header.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   }
 
   function setRunning(running) {
@@ -144,7 +221,7 @@
   }
 
   window.WBS_Panel = {
-    mount(version) { build(version); },
+    mount(version) { build(version); restorePosition(); },
     on(action, cb) { handlers[action] = cb; },
     getRange() {
       return {

@@ -33,6 +33,15 @@
   background: rgba(0, 0, 0, 0.25);
   border-bottom: 1px solid #2a475e;
   border-radius: 4px 4px 0 0;
+  cursor: move;
+  user-select: none;
+}
+
+/* header 内的按钮保持指针光标，不被 move 覆盖 */
+.wbs-header button,
+.wbs-header a {
+  cursor: pointer;
+  user-select: auto;
 }
 
 .wbs-header .wbs-title {

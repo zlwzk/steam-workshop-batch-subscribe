@@ -11,7 +11,7 @@
 ### 功能
 
 - 一键订阅当前页全部物品（Steam 侧幂等，已订阅不会重复）
-- **全部页（自动翻页）**：本页订阅完后自动跳到下一页，直到工坊末页；可在设置中限定自动翻页上限（默认 20 页，可调 1–100）
+- **全部页（自动翻页）**：本页订阅完后自动跳到下一页，直到工坊末页；分页探测更健壮（兼容 Steam 新旧版分页 UI），即使探测不到分页也会试探下一页并由重复页守卫自动停止；可在设置中限定自动翻页上限（默认 20 页，可调 1–100）
 - 批量退订当前页（红色二次确认）
 - 拟人节奏：每项随机间隔、每批自动冷却、429/5xx 自动指数退避（尊重 `Retry-After`）
 - 暂停 / 继续 / 取消，**失败项精准重试**（只重跑失败的物品，不再整页重扫）
@@ -20,7 +20,7 @@
 - **面板刷新**（↻）：改完冷却等设置后重新扫描当前页并重载设置，不中断进行中的任务
 - **版本显示与更新检查**：面板标题显示当前版本号；启动后每 12 小时静默检查一次 GitHub Release，也可点 ⇪ 手动检查；发现新版本时顶部横幅提示并给出下载链接
 - 登录状态自动识别（通过浏览器 Cookie 接口读取登录态，不接触账号密码）
-- Steam 原生深色风格悬浮面板，可折叠，中英双语自动切换
+- Steam 原生深色风格悬浮面板，**可拖动**（按住标题栏移动，位置自动记忆）、可折叠，中英双语自动切换
 - 任务进度角标；换游戏/换筛选时自动丢弃旧任务，防止串页
 
 ### 安装（Edge / Chrome）
@@ -79,7 +79,7 @@ A Manifest V3 Edge / Chrome extension to subscribe to all Steam Workshop items o
 ### Features
 
 - One-click subscribe to all items on the current page (idempotent on Steam's side)
-- **All Pages (auto page-turn)**: finishes a page and automatically moves to the next, until the workshop's last page; a configurable cap (default 20, range 1–100) prevents runaway runs
+- **All Pages (auto page-turn)**: finishes a page and automatically moves to the next, until the workshop's last page; pagination detection is now more robust (works with both old and new Steam pagination UIs), and it probes the next page even when pagination can't be detected, stopping via a duplicate-page guard; a configurable cap (default 20, range 1–100) prevents runaway runs
 - Batch unsubscribe (with confirmation)
 - Human-like pacing: random per-item delay, batch cooldown, exponential backoff honoring `Retry-After` on 429/5xx
 - Pause / resume / cancel, and **targeted retry** that re-runs only failed items
@@ -88,7 +88,7 @@ A Manifest V3 Edge / Chrome extension to subscribe to all Steam Workshop items o
 - **Panel refresh** (↻): rescans the page and reloads settings after you tweak cooldowns etc., without stopping a running job
 - **Version display & update check**: the current version is shown in the panel title; GitHub Releases is checked silently every 12 hours or manually with ⇪, showing a top banner with a download link when a new version exists
 - Automatic login detection via the browser cookie API (never touches your password)
-- Steam-native dark floating panel, collapsible, auto EN/中文
+- Steam-native dark floating panel, **draggable** (grab the title bar; position is remembered), collapsible, auto EN/中文
 - Badge progress counter; stale cross-page jobs are discarded when you switch games/filters
 
 ### Install (Edge / Chrome)
